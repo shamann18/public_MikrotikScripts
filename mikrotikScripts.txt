@@ -1,0 +1,56 @@
+Примеры нескольких скриптов на RouterOS.
+
+Скрипт для проверки и выполения обнрвления RouterOS с отправой уведомления в телеграм.
+
+:local chatId ""
+:local botToken ""
+/system package update check-for-updates
+:delay 10s;
+:local newVersionAvailable [/system package update get status];
+:local currentVersion [/system package update get installed-version];
+:local latestVersion [/system package update get latest-version];
+:local routerName [/system identity get name]
+:if ($newVersionAvailable = "New version is available") do={
+:local message ("<b> $routerName</b> update available. Installing in a minute. %0A%0A <b>Current version:</b> " . $currentVersion . ". %0A <b>Latest version:</b> " . $latestVersion)
+/tool fetch url=("https://api.telegram.org/bot" . $botToken . "/sendMessage?chat_id=" . $chatId . "&text=" . $message . "&parse_mode=HTML") keep-result=no
+    :delay 10s;
+    /system package update install
+}
+
+
+Скрипт бэкапа конфигурации по FTP.
+
+:local date [/system clock get date];
+:local backupFile ("routerName" . $date . ".backup");
+/system backup save name=$backupFile
+:delay 5s
+/tool fetch mode=ftp address=IP user=User password=Password port=FTP-Port src-path=$backupFile dst-path=("route" . $backupFile) upload=yes
+/file remove $backupFile
+:local otherScriptName "имя скрипта, которое отдельно отправляет сообщение, что бэкап выполнен"
+/system script run $otherScriptName
+
+
+Уведомление о проценте потерь по ICMP до ресурса
+
+:local chatId ""
+:local botToken ""
+:local target ""
+:local count 60
+:local pingResult [/ping $target count=$count]
+:local percentLost ((($count - $pingResult) * 100) / $count)
+:if ($percentLost > 10) do={
+    :local message ("<b>WARNING!</b> %0A%0A Ping result to " . $target . " %0A <b>Received:</b> " . $pingResult . " / " . $count . " %0A <b>Loss rate:</b> " . $percentLost . "%")
+    /tool fetch url=("https://api.telegram.org/bot" . $botToken . "/sendMessage?chat_id=" . $chatId . "&text=" . $message . "&parse_mode=HTML") keep-result=no    
+}
+
+
+Уведомление о количестве падений линка от оператора связи на интерфейсе за сутки. 
+:local chatId ""
+:local botToken ""
+:local interfaceName "";
+:local lastLinkUpTime [/interface get [find name=$interfaceName] last-link-up-time];
+:local lastLinkDownTime [/interface get [find name=$interfaceName] last-link-down-time];  
+:local linkDownsCount [/interface get [find name=$interfaceName] link-downs];
+:local routerName [/system identity get name]
+:local message ("<b>$routerName</b>%0A<i>Daily report</i>%0A%0A<b>$interfaceName</b>%0ALast Link Up Time: $lastLinkUpTime%0ALast Link Down Time: $lastLinkDownTime%0ALink Downs: $linkDownsCount")
+/tool fetch url=("https://api.telegram.org/bot" . $botToken . "/sendMessage?chat_id=" . $chatId . "&text=" . $message . "&parse_mode=HTML") keep-result=no
